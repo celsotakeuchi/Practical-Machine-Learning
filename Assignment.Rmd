@@ -1,0 +1,116 @@
+---
+title: "Practical Machine Learning"
+author: "Celso Takeuchi"
+date: "7 de janeiro de 2016"
+output: html_document
+---
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
+
+For feature extraction we used a sliding window approach with different lengths from 0.5 second to 2.5 seconds, with 0.5 second overlap. In each step of the sliding window approach we calculated features on the Euler angles (roll, pitch and yaw), as well as the raw accelerometer, gyroscope and
+magnetometer readings. For the Euler angles of each of the four sensors we calculated eight features: mean, variance,standard deviation, max, min, amplitude, kurtosis and skewness, generating in total 96 derived feature sets:
+
+In order to identify the most relevant features we will select variables with most significant variance.
+
+Predict value: classe to identify the type of exercise executed by the person.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#dataset#ixzz3wZoUTplA
+
+Setting up the environment and loading data
+```{r, echo = FALSE}
+## Setting up the environment
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+
+setwd("D:/login de rede/Meus documentos/_Celso Takeuchi/__DataScience/Data Science Specializaiton/8 - Practical Machine Learning/Assignment")
+
+## Reading Data
+data <- read.csv("pml-training.csv", header = TRUE, na.strings = c("", "NA", "NULL"))
+dim(data)
+raw_test <- read.csv("pml-testing.csv", header = TRUE, na.string = c("", "NA", "NULL"))
+dim(raw_test)
+```
+
+From the training dataset, the first 7 columns listed below are used to identify the users, and it will not be used in the predictive model:
+"X"
+"user_name"
+"raw_timestamp_part_1"    
+"raw_timestamp_part_2"
+"cvtd_timestamp"
+"new_window"              
+"num_window"
+
+```{r, echo=FALSE}
+not_used <- c ("X",
+               "user_name",
+               "raw_timestamp_part_1",
+               "raw_timestamp_part_2",
+               "cvtd_timestamp",
+               "new_window",
+               "num_window")
+data <- data[ , -which(names(data) %in% not_used)]
+rm(not_used)
+```
+
+Now we will identify variables that has variance near to zero. They won't be used in the prediction model.
+
+```{r, echo=FALSE}
+# Cleaning features that has variance near to zero
+nzv <- nearZeroVar(data, saveMetrics = TRUE)
+used_feat <- subset(nzv, nzv == "FALSE")
+data <- subset(data, select = rownames(used_feat))
+dim(data)
+```
+
+The next step is to remove the NAs values of the data
+```{r, echo=FALSE}
+# Removing columns with NA
+data <- data[ , colSums(is.na(data)) == 0]
+dim(data)
+```
+
+Time to clean the envoronment
+```{r, echo=FALSE}
+rm(nzv)
+rm(used_feat)
+```
+
+Now the data is properly ready to be used to model prediction. The training data will be split into testing and training data.
+
+```{r, echo=FALSE}
+set.seed(1000)
+TestIndex <- createDataPartition(y = data$classe, p = 0.3, list = FALSE)
+training <- data[-TestIndex,] # 70% of data to be used as training
+testing <- data[TestIndex, ] # 30% of data to be used as testing
+```
+
+
+Making the data analysis using tree
+```{r, echo=FALSE}
+
+model_tree <- rpart(classe ~ ., data = training, method = "class")
+pred_tree <- predict(model_tree, newdata = testing, type = "class")  
+confusionMatrix(pred_tree, testing$classe)
+fancyRpartPlot(model_tree)
+
+```
+
+
+Making the data analysis using Random Forest
+```{r, echo=FALSE}
+model_rf <- randomForest(classe ~ ., data = training, method = "class")
+pred_rf <- predict(model_rf, newdata = testing, type = "class")  
+confusionMatrix(pred_rf, testing$classe)
+```
+
+That is a very time consuming method, but if offers a better result. The Random Forest will be applied to predict the output for the testing data.
+
+```{r, echo=FALSE}
+predict <- predict(model_rf, newdata = raw_test, type = "class")
+predict
+```
